@@ -25,17 +25,17 @@ for creq in $(ls ${OUTPUT_DIR}/00*.yaml); do
   SECRETNAME=$(cat ${creq} | yq '.spec.secretRef.name')
   SECRETNS=$(cat ${creq} | yq '.spec.secretRef.namespace')
   CREDPOL=$(cat ${creq} | yq '.spec.providerSpec.statementEntries' -o json | sed 's/"action"/"Action"/g;s/"effect"/"Effect"/g;s/"resource"/"Resource"/g;s/"policyCondition"/"Condition"/g')
-  echo $OBJNAME $CREDPOL
   echo "{\"Version\": \"2012-10-17\"}" | jq --argjson STATEMT "${CREDPOL}" '. + {"Statement": $STATEMT}' > ${OUTPUT_DIR}/${OBJNAME}.json
   polArn=$(aws iam create-policy --policy-name ${INFRA_ID}-${OBJNAME} --policy-document file://${OUTPUT_DIR}/${OBJNAME}.json | grep Arn | cut -d\" -f4)
-  iamUser=$(aws iam create-user --user-name ${INFRA_ID}-${OBJNAME} --permissions-boundary ${polArn}) 
+  iamUser=$(aws iam create-user --user-name ${INFRA_ID}-${OBJNAME})
+  attUsr=$(aws iam attach-user-policy --user-name ${INFRA_ID}-${OBJNAME} --policy-arn ${polArn})
   iamKey=$(aws iam create-access-key --user-name ${INFRA_ID}-${OBJNAME})
-  echo ${iamKey}
-  ACCESS=$(echo "${iamKey}" | jq -r '.AccessKey.AccessKeyId' | base64)
-  SECRET=$(echo "${iamKey}" | jq -r '.AccessKey.SecretAccessKey' | base64)
-  cat secret.template | sed "s/SECRET_NAME/${SECRETNAME}/g;s/SECRET_NS/${SECRETNS}/g;s/ACCESSKEY/${ACCESS}/g;s/ACCESSSECRET/${SECRET}/g" > ${OUTPUT_DIR}/manifests/${OBJNAME}-secret.yaml
+  ACCESS=$(echo "${iamKey}" | jq -r '.AccessKey.AccessKeyId')
+  SECRET=$(echo "${iamKey}" | jq -r '.AccessKey.SecretAccessKey')
+  cat secret.template | sed "s/SECRET_NAME/${SECRETNAME}/g;s/SECRET_NS/${SECRETNS}/g;s/ACCESSKEY/${ACCESS}/g;s#ACCESSSECRET#${SECRET}#g" > ${OUTPUT_DIR}/manifests/${OBJNAME}-secret.yaml
+  rm ${creq}
+  rm ${OUTPUT_DIR}/${OBJNAME}.json
 done
-exit
 
 cp -R ${OUTPUT_DIR}/manifests ${OUTPUT_DIR}/manifests.orig
 cp -R ${OUTPUT_DIR}/openshift ${OUTPUT_DIR}/openshift.orig
